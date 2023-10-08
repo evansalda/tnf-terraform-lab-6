@@ -1,92 +1,140 @@
-# partie-6
+# CREATION DU SERVEUR WEB
 
+## Déclaration des datasources
 
+Plutôt que de directement renseigner l’ID du VPC et des sous-réseaux utilisés par vos ressources, vous allez utiliser des datasources pour les récupérer à partir de leur nom.
 
-## Getting started
+Dans le répertoire nuumfactory-labs/main-lab, crééz un fichier nommé **datasources.tf** et déclarez-y les 3 datasources suivantes :
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- Récupération des données du VPC dont le tag **Name** a pour valeur "nuumfactory-vpc"
+- Récupération des données du sous-réseau dont le tag **Name** a pour valeur "nuumfactory-public-subnet-1"
+- Récupération des données du sous-réseau dont le tag **Name** a pour valeur "nuumfactory-public-subnet-2"
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+Une fois vos datasources déclarées, utilisez la première pour renseigner l’ID du VPC de vos security groups.
 
-## Add your files
+## Déclaration de la VM EC2
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+En vous appuyant sur la [documentation officielle de terraform](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance), déclarez votre serveur web dans un fichier nommé ec2.tf avec les caractéristiques suivantes :
+
+| Caractéristique                                | Valeur                                     |
+|------------------------------------------------|--------------------------------------------|
+| ID de l’ami                                    | ami-0f82b13d37cd1e8cc                      |
+| type d’instance                                | La valeur de la variable ec2_type          |
+| sous-réseau                                    | L’ID du sous-réseau public de votre choix* |
+| Security group                                 | L’ID de votre security group ec2           |
+| Association d’une adresse IP publique          | Oui                                        |
+| Nom de la clé utilisée pour l’authentification | "nuumfactory-ec2-key-pair"                 |
+
+*Utilisez la datasource adéquat pour renseigner cette valeur.
+
+Enfin, ajoutez le tag **Name** en lui attribuant la valeur nuumfactory-\<env\>-ec2-\<digit\> (utilisez la variable locale adéquate).
+
+## Déclaration des user datas
+
+Sur AWS, les [**user data**](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/user-data.html) sont une liste d’instructions exécutées au lancement d’une VM EC2. Ces instructions peuvent être des commandes shell ou des directives cloud-init et sont listées dans un texte brut ou dans un fichier.
+
+Les user data étant exécutés avec l’utilisateur root, il n’est pas nécessaire d’y utiliser la commande sudo.
+
+Dans terraform, les user data sont renseignés au travers du paramètre **user_data** de la ressource **aws_instance** :
+
+**Texte brut**
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/thenuumfactory/mainlab/partie-6.git
-git branch -M main
-git push -uf origin main
+resource "aws_instance" "serveur_web" {
+ .
+ .
+ .
+  user_data = <<EOF
+#!/bin/bash
+echo "mes superbes user data !"
+EOF
+}
 ```
 
-## Integrate with your tools
+Notez que le contenu des user data n’est pas indenté, il se situe syntaxiquement au même niveau que la déclaration du block **resource{}**.
 
-- [ ] [Set up project integrations](https://gitlab.com/thenuumfactory/mainlab/partie-6/-/settings/integrations)
+**Fichier**
 
-## Collaborate with your team
+```
+resource "aws_instance" "serveur_web" {
+  .
+  .
+  .
+  user_data = file("user_data.sh")
+}
+```
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+Avec le fichier user_data.sh présent dans le répertoire où le code terraform se situe.
 
-## Test and Deploy
+La VM EC2 que vous avez précédemment déclarée fera office de serveur web dans votre infrastructure. Vous utiliserez les userdata pour y installer et configurer la stack apache-php-mariadb dessus (en remplaçant **serveur_web** par le nom renseigné dans votre code) :
 
-Use the built-in continuous integration in GitLab.
+```
+resource "aws_instance" "serveur_web" {
+  .
+  .
+  .
+  user_data = <<EOF
+#!/bin/bash
+yum update -y
+amazon-linux-extras install php8.0 mariadb10.5
+yum install -y httpd
+systemctl start httpd
+systemctl enable httpd
+usermod -a -G apache ec2-user
+chown -R ec2-user:apache /var/www
+chmod 2775 /var/www
+find /var/www -type d -exec chmod 2775 {} \;
+find /var/www -type f -exec chmod 0664 {} \;
+EOF
+}
+```
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+## Création du serveur web
 
-***
+Une fois votre serveur web déclaré, exécutez la commande **terraform fmt** puis la commande **terraform plan -var-file="developpement.tfvars"** : Corrigez les éventuelles erreurs obtenues et réexécutez la commande jusqu’à ne plus en obtenir.
 
-# Editing this README
+Observez le plan d’exécution et s’il correspond à ce que vous souhaitez réaliser, exécutez la commande **terraform apply -auto-approve -var-file="developpement.tfvars"**.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## Test de connexion SSH au serveur web
 
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+Créez le fichier ec2-private-key.pem dans votre répertoire de travail et collez-y le contenu suivant :
 
-## Name
-Choose a self-explaining name for your project.
+```
+-----BEGIN RSA PRIVATE KEY-----
+MIIEogIBAAKCAQB91BGbUmRV+bkF5Gnu1j0zSbNuLy/s/2JsVKhz0OIRY7mT7ESk
+j1yxb/32g0SKXgrcY4IIYlOjx9GMd8iuaFShh6Nbv8GSgHm3z8AwLkHgY6+WXati
+ckRBnEDKDbQ8F8K3xRBzJeM0s7hGkM3j4wQiLS5RBDL4nJeMdXekkn+HWKkjHEQ4
+a6X27wSDklRONzFxyGSWLZ3cm9NrUNTRE9P2DoGMRC/Z+NloS4DRmJQvJSykS4pp
++YO2rz0dT03kHrk40jkkM83rHCn9ELb86nRWHUsCk9PtC8RetTQbt4/xN5CB+OgM
+MKg+jxPZupv73QWRpXx2pCjeIsS47yWPI9u1AgMBAAECggEAS5a8RPyH/gYYmmuP
+H8Vf2pGp0sVSGyOIMt/gmkKfrCamczB6RAlDe+x1OkO9RwobqC23DeZTrI37WlET
+I4LVZHwhLJrTZHj9peiN4ePH+06nSsNWk7tlOazuVvNIlNkJRnCB40qdZSmZx/px
+VTcpYoaVzmGhZSxc9ioTB7BiICHRJpISuovtYhyHic/jtf0QvnOXhDV2FcPLeB8G
+86jWB+KiTrlIQS5T/gPtFc/lGzL5jsix9WfDU1C/uW4RntXaszr1RyEnZKAjjryh
+j8ucuZizH2MBMyHADYBIym1p/PIPckNp/Vfl9bmlZLDGDoo0rCJ+K/Hi7kBFzgub
+UPii+QKBgQC5rDRTBb9O9UVpsSZFS/Hyp/MH1G+SDOAhuVTZ/OXwlydhbPsm1BZq
+xqQFIhGV038BdFHb3QHNrPhBv1HHmLDPGgIInRx154vQJgN34i57HqkxW7O+F8Jg
+GW+sfy0c4zROgOf63GkuHdDivdrzikBA/SshHqzeZn+BphRkjLsl5wKBgQCtfQyi
+IzgdvvluQJBOYdaBIRFQlejlJzRU9ViX243q9fm/RDVq6ETLA/ijnLdJnB0NzE4A
+E8cHfkAjFS16xDi6UhFGgVpuq3WPT2kBsV/iCL5xsafPQUxwq0d91xmn521V7OqC
+NDpDHrQoaA4KlSp16V2qikgBkwtJiPSFSZkGAwKBgFMQRgxKSu7A7X++H7fqpOAA
+4MnE8PDuz6pmph4rdJbwmE6OmcEiKrE0Epa1Sha0GmKFLkXlFnR0CFApjiV0Gs1b
+/kLqPpxErRi+mNieGFs+OUT6mGvXZz7kwj/yWTVOM81W//ELgAaAkj2N4BEJ7Xrl
+h9D2TzHjuvE+YmslRmhLAoGBAKk38/6iQ7Yf9MOpjhgmLkg9rNnhnw0FNHI57XQR
+31dzHWuGaGQishcjhH5x+gV+lIhE40AICnYwmvadTYMVqg9yxQ70VPTloQFr/4x7
+Kn8a8EeNdZUeqCStrEn+aTPw9CB/ui3OK5YUeL2A4VFJNeVU/tu9jYabmsLbJ0Zr
+BytpAoGAD1MJ7uA++/8PpX3pNpLjROLXbiu2b9u0KEkut5QHLUNJ3gcMHI/rmlSn
+rEyVSBT36+7oQ3i5jsObhMikMOvSbzYkNH6jNcyRHjDDaFQ6VpxLyVYwQas90v13
+1S62VWRyK1J9qg3m7Y2x8mHEdaonWnwVoVkrPqIY9Uxp74hbhT8=
+-----END RSA PRIVATE KEY-----
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+Exécutez ensuite la commande suivante en remplaçant **adresse-ip-publique** par l’adresse IP publique de votre serveur web, consultable sur la console AWS :
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+```
+ssh -i "nuumfactory-ec2-key-pair.pem" ec2-user@adresse-ip-publique
+```
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+Répondez **yes** à la question **Are you sure you want to continue connecting (yes/no/[fingerprint])?** : Vous êtes maintenant connecté à votre serveur web.
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Tapez la commande **exit** pour vous déconnecter de votre serveur.
