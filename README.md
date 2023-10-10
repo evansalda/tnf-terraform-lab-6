@@ -134,7 +134,7 @@ rEyVSBT36+7oQ3i5jsObhMikMOvSbzYkNH6jNcyRHjDDaFQ6VpxLyVYwQas90v13
 Exécutez ensuite la commande suivante en remplaçant **adresse-ip-publique** par l’adresse IP publique de votre serveur web, consultable sur la console AWS :
 
 ```
-ssh -i "nuumfactory-ec2-key-pair.pem" ec2-user@adresse-ip-publique
+ssh -i "ec2-private-key.pem" ec2-user@adresse-ip-publique
 ```
 
 Répondez **yes** à la question **Are you sure you want to continue connecting (yes/no/[fingerprint])?** : Vous êtes maintenant connecté à votre serveur web.
