@@ -12,6 +12,8 @@ Dans le répertoire nuumfactory-labs/main-lab, crééz un fichier nommé **datas
 
 Une fois vos datasources déclarées, utilisez la première pour renseigner l’ID du VPC de vos security groups.
 
+Supprimez la variable **vpc** qui n'est plus utile.
+
 ## Déclaration de la VM EC2
 
 En vous appuyant sur la [documentation officielle de terraform](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/instance), déclarez votre serveur web dans un fichier nommé ec2.tf avec les caractéristiques suivantes :
