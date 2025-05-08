@@ -20,7 +20,7 @@ En vous appuyant sur la [documentation officielle de terraform](https://registry
 
 | Caractéristique                                | Valeur                                     |
 |------------------------------------------------|--------------------------------------------|
-| ID de l’ami                                    | ami-0f82b13d37cd1e8cc                      |
+| ID de l’ami                                    | ami-0f637d6de571fb4dd                      |
 | type d’instance                                | La valeur de la variable ec2_type          |
 | sous-réseau                                    | L’ID du sous-réseau public de votre choix* |
 | Security group                                 | L’ID de votre security group ec2           |
